@@ -11,6 +11,7 @@ import edu.ouc.entity.*;
 import edu.ouc.mapper.OrderMapper;
 import edu.ouc.service.IOrderService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -167,5 +168,57 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Orders> implement
         // 8.设置dtoPage的records属性
         dtoPage.setRecords(orderDtos);
         return dtoPage;
+    }
+
+    // 后台管理端获取订单分页展示
+    @Override
+    public Page<OrderDto> getAllPage(Long page, Long pageSize, String number, String beginTime, String endTime) {
+        // 1.创建分页封装器
+        Page<Orders> ordersPage = new Page<>(page, pageSize);
+        // 2.创建OrderDto的分页封装器
+        Page<OrderDto> dtoPage = new Page<>();
+
+        // 3.创建Orders的查询条件封装器
+        LambdaQueryWrapper<Orders> lqw = new LambdaQueryWrapper<>();
+        // 3.1 添加查询条件：按下单时间降序排列
+        lqw.orderByDesc(Orders::getOrderTime);
+        // 3.2 添加查询条件：按订单号查询
+        lqw.like(number != null, Orders::getNumber, number);
+        // 3.3 添加查询条件：  动态SQL-字符串使用StringUtils.isNotEmpty这个方法来判断
+        lqw.gt(StringUtils.isNotEmpty(beginTime), Orders::getOrderTime, beginTime);
+        lqw.lt(StringUtils.isNotEmpty(endTime), Orders::getOrderTime, endTime);
+        // 4.Orders分页查询
+        this.page(ordersPage, lqw);
+
+        // 5.除了Record都复制
+        BeanUtils.copyProperties(ordersPage, dtoPage, "records");
+
+        // 6.获取当前用户所有的order对象
+        List<Orders> orders = this.list(lqw);
+        // 7.通过stream流逐一包装成OrderDto对象
+        List<OrderDto> orderDtos = orders.stream().map(order -> {
+            // 7.1 创建OrderDto对象
+            OrderDto orderDto = new OrderDto();
+            // 7.2 拷贝属性
+            BeanUtils.copyProperties(order, orderDto);
+            // 7.3 调用OrderDetail业务层获取订单明细集合
+            LambdaQueryWrapper<OrderDetail> orderDetailLqw = new LambdaQueryWrapper<>();
+            orderDetailLqw.eq(OrderDetail::getOrderId, order.getNumber());
+            List<OrderDetail> orderDetails = orderDetailService.list(orderDetailLqw);
+            // 7.4 设置orderDto的订单明细属性
+            orderDto.setOrderDetails(orderDetails);
+            // 7.5 返回orderDto
+            return orderDto;
+        }).collect(Collectors.toList());
+
+        // 8.设置dtoPage的records属性
+        dtoPage.setRecords(orderDtos);
+        return dtoPage;
+    }
+
+    // 修改订单状态
+    @Override
+    public Boolean update(Orders order) {
+        return this.updateById(order);
     }
 }

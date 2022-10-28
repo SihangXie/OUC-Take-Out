@@ -73,7 +73,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
         // 比对用户输入的验证码和真实验证码，错了直接登录失败
         if (!code.equals(trueCode)) {
-//        if (false) {
+//        if (false) {  // 用于调试时免验证码校验登录
             throw new CustomException("验证码错误");
         }
 
