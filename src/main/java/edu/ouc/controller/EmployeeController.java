@@ -1,6 +1,7 @@
 package edu.ouc.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import edu.ouc.common.R;
 import edu.ouc.entity.Employee;
 import edu.ouc.service.IEmployeeService;
@@ -8,13 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.DigestUtils;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
-import java.time.LocalDateTime;
 
 /**
  * @Author: Sihang Xie
@@ -77,34 +74,56 @@ public class EmployeeController {
     @PostMapping
     public R<String> save(HttpServletRequest request, @RequestBody Employee employee) {
 
-        // 1.检验账号username是否已存在
-        String username = employee.getUsername();
-        LambdaQueryWrapper<Employee> lqw = new LambdaQueryWrapper<>();
-        lqw.eq(Employee::getUsername, username);
-        Employee emp = empService.getOne(lqw);
-        if (emp != null) {
-            return R.error("账号已存在，添加失败");
-        }
+        // 1.设置创建人ID
+//        employee.setCreateUser((Long) request.getSession().getAttribute("employee"));
 
-        // 2.设置创建人ID
-        employee.setCreateUser((Long) request.getSession().getAttribute("employee"));
+        // 2.设置最后修改人ID
+//        employee.setUpdateUser((Long) request.getSession().getAttribute("employee"));
 
-        // 3.设置最后修改人ID
-        employee.setUpdateUser((Long) request.getSession().getAttribute("employee"));
-
-        // 4.设置初始密码为身份证后6位，并经过MD5加密
+        // 3.设置初始密码为身份证后6位，并经过MD5加密
         String idNumber = employee.getIdNumber();
         String password = DigestUtils.md5DigestAsHex(idNumber.substring(idNumber.length() - 6).getBytes());
         employee.setPassword(password);
 
-        // 5.设置创建时间
-        employee.setCreateTime(LocalDateTime.now());
+        // 4.设置创建时间
+//        employee.setCreateTime(LocalDateTime.now());
 
-        // 6.设置创建时间
-        employee.setUpdateTime(LocalDateTime.now());
+        // 5.设置修改时间
+//        employee.setUpdateTime(LocalDateTime.now());
 
-        // 7.调用业务层保存到数据库中
+        // 6.调用业务层保存到数据库中
         empService.save(employee);
         return R.success("添加成功");
+    }
+
+    // 分页查询+根据员工姓名查询功能
+    @GetMapping("/page")
+    public R<Page<Employee>> getPage(Long page, Long pageSize, String name) {
+        return R.success(empService.getPage(page, pageSize, name));
+    }
+
+    // 修改员工信息
+    @PutMapping
+    public R<String> update(@RequestBody Employee employee) {
+        if (empService.updateById(employee)) {
+
+            // 查看当前线程的ID
+            long id = Thread.currentThread().getId();
+            log.info("线程ID为：{}", id);
+
+            return R.success("修改成功");
+        }
+        return R.error("修改失败");
+    }
+
+    // 根据ID查询员工信息
+    @GetMapping("/{id}")
+    public R<Employee> getById(@PathVariable Long id) {
+        Employee employee = empService.getById(id);
+        // 当查询结果不为空时才返回employee
+        if (employee != null) {
+            return R.success(employee);
+        }
+        return R.error("查询员工不存在");
     }
 }
