@@ -1,8 +1,21 @@
-# 瑞吉外卖
+# 听海餐厅(瑞吉外卖)
 
 *谢斯航*
 
 ------
+
+<div align=center><img src="https://raw.githubusercontent.com/SihangXie/pic-bed/master/img/logo-login.png" width="400"></div>
+
+
+# 前言
+- 本项目《听海餐厅》是基于黑马《瑞吉外卖》改名而来，感谢黑马贡献的高质量视频教程。
+- 本项目将短信登录改造成了邮箱登录。
+- 为了避免各位小伙伴面试时被面试官嘲讽【你们项目组还挺大啊】的尴尬场面，将原项目改名成了《听海餐厅》。
+
+> - 黑马《瑞吉外卖》视频教程连接：[黑马程序员Java项目实战《瑞吉外卖》，轻松掌握springboot + mybatis plus开发核心技术的真java实战项目](https://www.bilibili.com/video/BV13a411q753?p=1&vd_source=ff1f70c9f263d908963cefc562648f80)
+> - 本文项目完整源码链接：[https://github.com/SihangXie/OUC-Take-Out](https://github.com/SihangXie/OUC-Take-Out)
+
+
 
 
 
@@ -69,7 +82,28 @@
 
 ## 2. 产品原型展示
 
-略。
+
+
+### 2.1 后台管理登录界面
+![在这里插入图片描述](https://img-blog.csdnimg.cn/9ed9e4659c62477ca33e7e706273cda2.png)
+<br/>
+
+### 2.2 后台管理界面展示
+![在这里插入图片描述](https://img-blog.csdnimg.cn/3e4c0849349c4c8cb79654b78aaaf69b.png)
+
+<br/>
+
+### 2.3 用户端登录界面展示
+![在这里插入图片描述](https://img-blog.csdnimg.cn/92821f1b6ade42c6b2e1967dda162aa5.png)
+<br/>
+
+### 2.4 邮件验证码展示
+![在这里插入图片描述](https://img-blog.csdnimg.cn/a79ac48c531a478ebdce9d42fffa93e0.png)
+
+
+
+### 2.5 用户端界面展示
+![在这里插入图片描述](https://img-blog.csdnimg.cn/aaa4156f8f554123be7849792af4c918.png)
 
 
 
@@ -7292,4 +7326,199 @@ The dependencies of some of the beans in the application context form a cycle:
 
 
 
-- 至此，海大送餐基础功能就全部开发完毕了。
+
+
+# 十一、 后台订单管理业务
+
+
+
+## 1. 订单分页与订单查询
+
+
+
+### 1.1 需求分析
+
+
+
+#### ① 功能分析
+
+- 后台的订单分页展示与订单搜索可以合并成一个方法。
+
+
+
+#### ② 请求分析
+
+- 用户点击【订单明细】或者输入订单搜索条件点击【查询】后，前端以 GET 方式向后端 URL 为 `/order/page` 的地址发送请求。
+
+  ![image-20221028140616673](https://raw.githubusercontent.com/SihangXie/pic-bed/master/img/image-20221028140616673.png)
+
+- 负载为分页信息与订单号查询、按下单时间范围查询：
+
+  ![image-20221028140720875](https://raw.githubusercontent.com/SihangXie/pic-bed/master/img/image-20221028140720875.png)
+
+
+
+### 1.2 代码开发
+
+- 订单 Orders 的架子已经在开发客户端的时候已经搭起来了，只需要往上添加功能即可。
+
+
+
+#### ① 业务层开发
+
+
+
+- 订单表 `orders` 业务层接口 `IOrderService.java` ：
+
+  ```java
+  // 后台管理端获取订单分页展示
+  Page<OrderDto> getAllPage(Long page, Long pageSize, String number, String beginTime, String endTime);
+  ```
+
+
+
+- 订单表 `orders` 业务层接口实现类 `OrderServiceImpl.java` ：
+
+  ```java
+  // 后台管理端获取订单分页展示
+  @Override
+  public Page<OrderDto> getAllPage(Long page, Long pageSize, String number, String beginTime, String endTime) {
+      // 1.创建分页封装器
+      Page<Orders> ordersPage = new Page<>(page, pageSize);
+      // 2.创建OrderDto的分页封装器
+      Page<OrderDto> dtoPage = new Page<>();
+  
+      // 3.创建Orders的查询条件封装器
+      LambdaQueryWrapper<Orders> lqw = new LambdaQueryWrapper<>();
+      // 3.1 添加查询条件：按下单时间降序排列
+      lqw.orderByDesc(Orders::getOrderTime);
+      // 3.2 添加查询条件：按订单号查询
+      lqw.like(number != null, Orders::getNumber, number);
+      // 3.3 添加查询条件：  动态SQL-字符串使用StringUtils.isNotEmpty这个方法来判断
+      lqw.gt(StringUtils.isNotEmpty(beginTime), Orders::getOrderTime, beginTime);
+      lqw.lt(StringUtils.isNotEmpty(endTime), Orders::getOrderTime, endTime);
+      // 4.Orders分页查询
+      this.page(ordersPage, lqw);
+  
+      // 5.除了Record都复制
+      BeanUtils.copyProperties(ordersPage, dtoPage, "records");
+  
+      // 6.获取当前用户所有的order对象
+      List<Orders> orders = this.list(lqw);
+      // 7.通过stream流逐一包装成OrderDto对象
+      List<OrderDto> orderDtos = orders.stream().map(order -> {
+          // 7.1 创建OrderDto对象
+          OrderDto orderDto = new OrderDto();
+          // 7.2 拷贝属性
+          BeanUtils.copyProperties(order, orderDto);
+          // 7.3 调用OrderDetail业务层获取订单明细集合
+          LambdaQueryWrapper<OrderDetail> orderDetailLqw = new LambdaQueryWrapper<>();
+          orderDetailLqw.eq(OrderDetail::getOrderId, order.getNumber());
+          List<OrderDetail> orderDetails = orderDetailService.list(orderDetailLqw);
+          // 7.4 设置orderDto的订单明细属性
+          orderDto.setOrderDetails(orderDetails);
+          // 7.5 返回orderDto
+          return orderDto;
+      }).collect(Collectors.toList());
+  
+      // 8.设置dtoPage的records属性
+      dtoPage.setRecords(orderDtos);
+      return dtoPage;
+  }
+  ```
+
+  
+
+#### ② 控制层开发
+
+- 订单表 `orders` 表现层 `OrderController.java` ：
+
+  ```java
+  // 后台管理端获取订单分页展示
+  @GetMapping("/page")
+  public R<Page<OrderDto>> page(Long page, Long pageSize, String number, String beginTime, String endTime) {
+      return R.success(orderService.getAllPage(page, pageSize, number, beginTime, endTime));
+  }
+  ```
+
+
+
+
+
+## 2. 订单状态修改
+
+
+
+### 2.1 需求分析
+
+
+
+#### ① 功能分析
+
+- 后台用户点击【派送】后，把订单状态由 2 改成了 3。
+
+
+
+#### ② 请求分析
+
+- 用户点击【派送】后，前端以 PUT 方式向后端 URL 为 `/order` 的地址发送请求。
+
+  ![image-20221028143915293](https://raw.githubusercontent.com/SihangXie/pic-bed/master/img/image-20221028143915293.png)
+
+- 负载是订单号和要修改的状态：
+
+  ![image-20221028144004907](https://raw.githubusercontent.com/SihangXie/pic-bed/master/img/image-20221028144004907.png)
+
+
+
+### 2.2 代码开发
+
+- 订单 Orders 的架子已经在开发客户端的时候已经搭起来了，只需要往上添加功能即可。
+
+
+
+#### ① 业务层开发
+
+
+
+- 订单表 `orders` 业务层接口 `IOrderService.java` ：
+
+  ```java
+  // 修改订单状态
+  Boolean update(Orders order);
+  ```
+
+
+
+- 订单表 `orders` 业务层接口实现类 `OrderServiceImpl.java` ：
+
+  ```java
+  // 修改订单状态
+  @Override
+  public Boolean update(Orders order) {
+      return this.updateById(order);
+  }
+  ```
+
+  
+
+#### ② 控制层开发
+
+- 订单表 `orders` 表现层 `OrderController.java` ：
+
+  ```java
+  // 修改订单状态
+  @PutMapping
+  public R<String> update(@RequestBody Orders order) {
+      if (orderService.update(order)) {
+          return R.success("修改成功");
+      }
+      return R.error("修改失败");
+  }
+  ```
+
+
+
+
+
+- 至此，海大送餐基础功能就全部开发完毕了。完结撒花！
