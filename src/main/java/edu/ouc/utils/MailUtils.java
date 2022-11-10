@@ -56,7 +56,7 @@ public class MailUtils {
         // 4.3 设置邮件标题
         message.setSubject("【海大送餐】邮箱登录验证码");
         // 4.4 设置邮件的正文
-        message.setContent("尊敬的用户：您好！\r\n您的登录验证码为：" + code + "（有效期为一分钟，请勿告知他人）", "text/html;charset=UTF-8");
+        message.setContent("尊敬的用户：您好！\r\n您的登录验证码为：" + code + "（有效期为五分钟，请勿告知他人）", "text/html;charset=UTF-8");
 
         // 5.最后，发送邮件
         Transport.send(message);

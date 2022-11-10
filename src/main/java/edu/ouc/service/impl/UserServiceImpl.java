@@ -9,11 +9,14 @@ import edu.ouc.mapper.UserMapper;
 import edu.ouc.service.IUserService;
 import edu.ouc.utils.MailUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.mail.MessagingException;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @Author: Sihang Xie
@@ -26,6 +29,10 @@ import java.util.Map;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
 
+    // 注入RedisTemplate对象
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
     // 发送邮箱验证码
     @Override
     public Boolean sendMsg(User user, HttpSession session) throws MessagingException {
@@ -37,19 +44,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             String code = MailUtils.getCode();
             // 2.2 发送验证码邮件
             MailUtils.sendMail(email, code);
-            // 启动多线程来限定验证码的时效性
-            new Thread(() -> {
-                try {
-                    // 验证码的有效时长
-                    Thread.sleep(60000L);
-                    // 更换新验证码
-                    session.setAttribute(email, MailUtils.getCode());
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }).start();
-            // 2.3 把获得的验证码存入session保存作用域，方便后面拿出来比对
-            session.setAttribute(email, code);
+            // 2.3 将验证码存入到Redis中，key是email，value是验证码，有效期设置为5分钟
+            redisTemplate.opsForValue().set(email, code, 5, TimeUnit.MINUTES);
             return true;
         }
         return false;
@@ -68,8 +64,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
 
         // 如果邮箱和验证码不为空，前往调用数据层查询数据库有无该用户
-        // 获取之前存在session保存作用域中的正确验证码
-        String trueCode = (String) session.getAttribute(email);
+        // 从Redis中获取缓存的验证码
+        String trueCode = (String) redisTemplate.opsForValue().get(email);
 
         // 比对用户输入的验证码和真实验证码，错了直接登录失败
         if (!code.equals(trueCode)) {
@@ -92,6 +88,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         }
         // 最后把这个登录用户存到session保存作用域中，表示已登录，让拦截器放行
         session.setAttribute("user", user.getId());
+
+        // 用户登录成功，删除Redis中缓存的验证码
+        redisTemplate.delete(email);
+
         return user;
     }
 
