@@ -18,6 +18,7 @@ spring:
     host: 192.168.148.100
     port: 6379
     password: xsh981104
+    database: 0
     lettuce:
       pool:
         # 最大连接数
