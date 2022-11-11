@@ -10,7 +10,7 @@ import edu.ouc.service.IUserService;
 import edu.ouc.utils.MailUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.mail.MessagingException;
@@ -29,9 +29,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
 
-    // 注入RedisTemplate对象
+    // 注入StringRedisTemplate对象
     @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    private StringRedisTemplate redisTemplate;
 
     // 发送邮箱验证码
     @Override
@@ -63,9 +63,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             throw new CustomException("邮箱或验证码不能为空");
         }
 
+
         // 如果邮箱和验证码不为空，前往调用数据层查询数据库有无该用户
         // 从Redis中获取缓存的验证码
-        String trueCode = (String) redisTemplate.opsForValue().get(email);
+        String trueCode = redisTemplate.opsForValue().get(email);
 
         // 比对用户输入的验证码和真实验证码，错了直接登录失败
         if (!code.equals(trueCode)) {

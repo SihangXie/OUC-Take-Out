@@ -1,5 +1,7 @@
 package edu.ouc.service.impl;
 
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -16,11 +18,13 @@ import org.apache.logging.log4j.util.Strings;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +50,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
     @Autowired
     private ISetmealService setmealService;
 
+    // 自动注入StringRedisTemplate类对象
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
 
     // 新增菜品，同时插入菜品对应的口味数据
     @Transactional  // 涉及到多张表操作，开启事务
@@ -63,7 +71,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
         // peek()是stream的中间操作，是对象的时候才能修改
         flavors = flavors.stream().peek(flavor -> flavor.setDishId(dishId)).collect(Collectors.toList());
 
-        // 4.调用批量保存
+        // 4.1 动态地构造key
+        String key = "dish_" + dishDto.getCategoryId() + "_1";   // dish_1397844263642378242_1
+        // 4.2 清理Redis这个key的数据
+        redisTemplate.delete(key);
+
+        // 5.调用批量保存
         return dishFlavorService.saveBatch(flavors);
     }
 
@@ -159,7 +172,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
         // 4.批量添加修改后的菜品口味到菜品口味表中
         dishFlavorService.saveBatch(flavors);
 
-        // 5.更新菜品基本信息
+        // 5.清理该菜品对应类别的Redis缓存
+        // 5.1 动态地构造key
+        String key = "dish_" + dishDto.getCategoryId() + "_1";   // dish_1397844263642378242_1
+        // 5.2 清理Redis这个key的数据
+        redisTemplate.delete(key);
+
+        // 6.更新菜品基本信息
         return this.updateById(dishDto);
     }
 
@@ -192,7 +211,17 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
         // 2.使用集合的stream流修改售卖状态
         dishes = dishes.stream().peek(dish -> dish.setStatus(status)).collect(Collectors.toList());
 
-        // 3.批量update
+        // 4.1 获取涉及到的菜品的类别ID集合，再封装成key
+        Set<String> keys = dishes.stream().map(dish -> {
+            // 获取每个菜品的类别ID
+            Long categoryId = dish.getCategoryId();
+            // 用hutool工具包把类别ID序列化成JSON字符串
+            return "dish_" + JSONUtil.toJsonStr(categoryId) + "_1";
+        }).collect(Collectors.toSet()); // 因为要求类别ID不重复，因此用Set
+        // 4.2 清理Redis这个key的数据
+        redisTemplate.delete(keys);
+
+        // 5.批量update
         return this.updateBatchById(dishes);
     }
 
@@ -233,6 +262,17 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
             throw new CustomException(setmealNames + "套餐正在售卖该菜品，删除失败，请删除套餐后重试");
         }
 
+        // 4. 清理Redis改菜品对应类别的缓存
+        // 4.1 获取涉及到的菜品的类别ID集合，再封装成key
+        Set<String> keys = dishes.stream().map(dish -> {
+            // 获取每个菜品的类别ID
+            Long categoryId = dish.getCategoryId();
+            // 用hutool工具包把类别ID序列化成JSON字符串
+            return "dish_" + JSONUtil.toJsonStr(categoryId) + "_1";
+        }).collect(Collectors.toSet()); // 因为要求类别ID不重复，因此用Set
+        // 4.2 清理Redis这个key的数据
+        redisTemplate.delete(keys);
+
         // 批量删除菜品
         this.removeByIds(ids);
 
@@ -245,6 +285,22 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
     // 根据指定过滤条件查询菜品
     @Override
     public List<DishDto> listWithFlavor(Dish dish) {
+
+        // 先尝试从Redis中获取缓存菜品数据
+        // 动态地构造key，根据菜品的分类ID和状态作为Redis的key
+        String key = "dish_" + dish.getCategoryId() + "_" + dish.getStatus();   // dish_1397844263642378242_1
+        // 用这个key尝试获取同一类别下的所有菜品列表，返回的是JSON字符串，需要手动反序列化成Java对象
+        String strDishDtoList = redisTemplate.opsForValue().get(key);
+
+        // 如果存在，直接返回，无需查询MySQL数据库
+        if (StrUtil.isNotBlank(strDishDtoList)) {
+            // 用hutool的工具包进行反序列化成Java对象并返回
+            return JSONUtil.toList(strDishDtoList, DishDto.class);
+        }
+
+        // 如果不存在，则去MySQL数据库中查询，并把查询到的数据缓存到Redis中
+
+
         // 1.创建条件过滤器
         LambdaQueryWrapper<Dish> lqw = new LambdaQueryWrapper<>();
         // 2.添加过滤条件：根据分类ID查询菜品
@@ -257,7 +313,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
         List<Dish> dishes = this.list(lqw);
 
         // 6.使用集合的stream流逐一把dish封装成dishDto
-        return dishes.stream().map(dishItem -> {
+        List<DishDto> dishDtoList = dishes.stream().map(dishItem -> {
             // 6.1 创建dishDto对象
             DishDto dishDto = new DishDto();
             // 6.2 把dish的所有属性值复制到dishDto对象中
@@ -273,5 +329,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements ID
             // 6.7 返回封装好的dishDto对象
             return dishDto;
         }).collect(Collectors.toList());
+
+        // 7.把从MySQL查询到的数据缓存到Redis中，有效期60分钟
+        // 7.1 用hutool工具把dishDtoList序列化成JSON字符串
+        redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(dishDtoList), 60, TimeUnit.MINUTES);
+
+        // 8.返回
+        return dishDtoList;
     }
 }
