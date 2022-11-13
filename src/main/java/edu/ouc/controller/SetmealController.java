@@ -8,6 +8,7 @@ import edu.ouc.service.ISetmealDishService;
 import edu.ouc.service.ISetmealService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -63,6 +64,7 @@ public class SetmealController {
 
     // (批量)套餐启售/停售
     @PostMapping("/status/{status}")
+    @CacheEvict(value = "setmealCache", allEntries = true)  // 表示删除"SetmealCache"下的所有缓存数据(个人感觉粒度太粗了)
     public R<String> updateStatus(@PathVariable Integer status, @RequestParam List<Long> ids) {
         if (setmealService.updateStatus(status, ids)) {
             return R.success("修改成功");
@@ -72,6 +74,7 @@ public class SetmealController {
 
     // 根据套餐ID删除(批量删除)套餐
     @DeleteMapping
+    @CacheEvict(value = "setmealCache", allEntries = true)  // 表示删除"SetmealCache"下的所有缓存数据(个人感觉粒度太粗了)
     public R<String> removeWithDishes(@RequestParam List<Long> ids) {
         if (setmealService.removeWithDish(ids)) {
             return R.success("删除成功");

@@ -19,16 +19,18 @@ spring:
     port: 6379
     password: xsh981104
     database: 0
+    # 设置Lettuce Redis连接池
     lettuce:
       pool:
-        # 最大连接数
-        max-active: 8
-        # 最大空闲连接
-        max-idle: 8
-        # 最小空闲连接
-        min-idle: 0
-        # 等待时长
-        max-wait: 100ms
+        max-active: 8 # 最大连接数
+        max-idle: 8 # 最大空闲连接
+        min-idle: 0 # 最小空闲连接
+        max-wait: 100ms # 等待时长
+  # 配置Spring Cache缓存
+  cache:
+    type: redis # 设置缓存技术使用Redis
+    redis:
+      time-to-live: 3600000 # 设置缓存有效期为60min
 
 # 配置Mybatis-Plus
 mybatis-plus:

@@ -16,7 +16,10 @@ import edu.ouc.service.ISetmealService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,10 +49,15 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
     @Autowired
     private IDishService dishService;
 
+    // 注入StringRedisTemplate
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
 
     // 新增套餐，同时插入套餐对应菜品
     @Override
     @Transactional  // 多表操作切记添加事务注解
+    @CacheEvict(value = "setmealCache", key = "#setmealDto.categoryId + '_' + #setmealDto.status")
     public Boolean saveWithSetmealDishes(SetmealDto setmealDto) {
         // 1.保存套餐的基本信息
         this.save(setmealDto);
@@ -130,6 +138,7 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
     // 修改套餐信息和套餐关联菜品
     @Override
     @Transactional  // 修改两张表不能忘记事务注解
+    @CacheEvict(value = "setmealCache", key = "#setmealDto.categoryId + '_' + #setmealDto.status")
     public Boolean updateWithDishes(SetmealDto setmealDto) {
         // 1.修改setmeal基本信息
         this.updateById(setmealDto);
@@ -245,6 +254,7 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
 
     // 根据条件查询套餐集合
     @Override
+    @Cacheable(value = "setmealCache", key = "#setmeal.categoryId + '_' + #setmeal.status")
     public List<Setmeal> list(Setmeal setmeal) {
         // 1.创建查询条件封装器
         LambdaQueryWrapper<Setmeal> lqw = new LambdaQueryWrapper<>();
