@@ -29,6 +29,13 @@
             <version>2.2.2</version>
         </dependency>
 
+        <!-- Sharding-JDBC -->
+        <dependency>
+            <groupId>org.apache.shardingsphere</groupId>
+            <artifactId>sharding-jdbc-spring-boot-starter</artifactId>
+            <version>4.0.1</version>
+        </dependency>
+
         <!-- Spring Data Redis -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -78,8 +85,8 @@
         <!-- Druid数据库连接池 -->
         <dependency>
             <groupId>com.alibaba</groupId>
-            <artifactId>druid-spring-boot-starter</artifactId>
-            <version>1.2.12</version>
+            <artifactId>druid</artifactId>
+            <version>1.2.8</version>
         </dependency>
 
         <dependency>

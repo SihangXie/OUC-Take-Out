@@ -6,13 +6,6 @@ spring:
   application:
     # 应用名称 (可选)
     name: reggie_take_out
-  # 配置Druid数据库连接池
-  datasource:
-    druid:
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://192.168.148.100:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
-      username: root
-      password: xsh981104
   # 配置Redis连接
   redis:
     host: 192.168.148.100
@@ -31,6 +24,38 @@ spring:
     type: redis # 设置缓存技术使用Redis
     redis:
       time-to-live: 3600000 # 设置缓存有效期为60min
+  # 配置Sharding-JDBC读写分离规则
+  shardingsphere:
+    # 指定数据源
+    datasource:
+      names:
+        master,slave  # 一主一从
+      # 配置主库数据源
+      master: # 必须跟上面names对应
+        type: com.alibaba.druid.pool.DruidDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://192.168.148.100:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: xsh981104
+      # 配置从库数据源
+      slave: # 必须跟上面names对应
+        type: com.alibaba.druid.pool.DruidDataSource
+        driver-class-name: com.mysql.cj.jdbc.Driver
+        url: jdbc:mysql://192.168.148.101:3306/reggie?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+        username: root
+        password: xsh981104
+    # 读写分离配置
+    masterslave:
+      load-balance-algorithm-type: round_robin  # 多个从库的负载均衡策略：轮询
+      name: dataSource  # 最终的数据源名称
+      master-data-source-name: master # 主库数据源名称
+      slave-data-source-names: slave  # 从库数据源名称列表，多个逗号分隔
+    props:
+      sql:
+        show: true  # 开启SQL显示，默认false
+  main:
+    # 允许bean定义覆盖
+    allow-bean-definition-overriding: true
 
 # 配置Mybatis-Plus
 mybatis-plus:
